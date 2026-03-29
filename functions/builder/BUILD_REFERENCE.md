@@ -1,10 +1,21 @@
-
+# 🏗️ Production Build Reference
 **Generated:** 2026-02-14 16:28:33
 
 This document serves as the "Rosetta Stone" for the production build. 
 Use this to map obfuscated errors and file paths back to the original source code.
 
+---
 
+## 🤖 System Prompt for AI Agents
+*(Copy-paste this block into Cursor/ChatGPT if you are debugging a production error)*
+
+> "I am debugging a production build where files and CSS classes have been obfuscated. 
+> Below is the mapping logic. If I reference a file like `styles/b1c...css`, it maps to `styles/index.css`. 
+> If I reference a class `_b`, it maps to `row-section`. Use this context to explain errors."
+
+---
+
+## 1. 📂 File System Mapping (Cache Busting)
 *Mapping source files to their production hash filenames.*
 
 | Original Source File | Production Filename (Hashed) |
@@ -36,7 +47,7 @@ Use this to map obfuscated errors and file paths back to the original source cod
 
 ---
 
-## 2. DOM Obfuscation Map (Classes & IDs)
+## 2. 🛡️ DOM Obfuscation Map (Classes & IDs)
 *Mapping original readable IDs/Classes to minified production codes.*
 
 | Minified Code | Original ID/Class | Type |
@@ -77,9 +88,9 @@ Use this to map obfuscated errors and file paths back to the original source cod
 | **`_ao`** | `premium-start-btn` | Class |
 | **`_ap`** | `loader-text-moon` | Class |
 | **`_aq`** | `slider-container` | ID |
-| **`_ar`** | `streamprotectedtrack_c-ee2-subtitle` | Class |
+| **`_ar`** | `chapter-subtitle` | Class |
 | **`_as`** | `premium-subtitle` | Class |
-| **`_at`** | `active-streamprotectedcase_c-ww2-img` | Class |
+| **`_at`** | `active-verse-img` | Class |
 | **`_au`** | `translation-text` | Class |
 | **`_av`** | `heroz-title-text` | Class |
 | **`_aw`** | `status-indicator` | Class |
@@ -101,16 +112,16 @@ Use this to map obfuscated errors and file paths back to the original source cod
 | **`_bb`** | `trans-line-next` | Class |
 | **`_bc`** | `player-controls` | Class |
 | **`_bd`** | `content-display` | Class |
-| **`_be`** | `streamprotectedcase_c-ww2-container` | ID |
+| **`_be`** | `verse-container` | ID |
 | **`_bf`** | `hero-title-text` | Class |
 | **`_bg`** | `door-hero-title` | Class |
-| **`_bh`** | `streamprotectedcase_c-ww2-text-next` | Class |
+| **`_bh`** | `verse-text-next` | Class |
 | **`_bi`** | `premium-loader` | Class |
 | **`_bj`** | `search-overlay` | Class |
 | **`_bk`** | `premium-status` | Class |
 | **`_bl`** | `loader-spinner` | Class |
 | **`_bm`** | `bottom-actions` | Class |
-| **`_bn`** | `streamprotectedtrack_c-ee2-select` | Class |
+| **`_bn`** | `chapter-select` | Class |
 | **`_bo`** | `auth-group-web` | Class |
 | **`_bp`** | `legal-backdrop` | Class |
 | **`_bq`** | `dashboard-view` | Class |
@@ -139,7 +150,7 @@ Use this to map obfuscated errors and file paths back to the original source cod
 | **`_cd`** | `premium-title` | Class |
 | **`_cf`** | `footer-reveal` | Class |
 | **`_cg`** | `import-button` | Class |
-| **`_ch`** | `streamprotectedtrack_c-ee2-title` | Class |
+| **`_ch`** | `chapter-title` | Class |
 | **`_ci`** | `fixed-overlay` | Class |
 | **`_cj`** | `clips-section` | Class |
 | **`_ck`** | `auth-subtitle` | Class |
@@ -182,14 +193,14 @@ Use this to map obfuscated errors and file paths back to the original source cod
 | **`_dl`** | `social-btn` | Class |
 | **`_dm`** | `btn-google` | Class |
 | **`_dn`** | `nav-search` | Class |
-| **`_do`** | `streamprotectedcase_c-ww2-text` | Class |
+| **`_do`** | `verse-text` | Class |
 | **`_dp`** | `row-header` | Class |
 | **`_dq`** | `no-results` | Class |
 | **`_dr`** | `auth-modal` | Class |
 | **`_ds`** | `card-title` | Class |
 | **`_dt`** | `clips-list` | Class |
 | **`_du`** | `auth-error` | Class |
-| **`_dw`** | `streamprotected_cb2-card` | Class |
+| **`_dw`** | `surah-card` | Class |
 | **`_dx`** | `appx-brand` | Class |
 | **`_dy`** | `auth-title` | Class |
 | **`_dz`** | `status-msg` | Class |
@@ -224,7 +235,7 @@ Use this to map obfuscated errors and file paths back to the original source cod
 | **`_o`** | `hero-subtitle-overlay` | Class |
 | **`_p`** | `premium-brand-replica` | Class |
 | **`_q`** | `custom-select-trigger` | Class |
-| **`_r`** | `current-streamprotectedtrack_c-ee2-title` | Class |
+| **`_r`** | `current-chapter-title` | Class |
 | **`_s`** | `cinema-seek-indicator` | Class |
 | **`_t`** | `search-input-display` | Class |
 | **`_u`** | `premium-card-wrapper` | ID |

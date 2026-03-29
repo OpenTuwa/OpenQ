@@ -18,8 +18,8 @@ export async function onRequestPost(context) {
     // 2. AI Prompt - Asks for Multiple Results
     const ai = new Ai(env.AI);
     const systemPrompt = `
-      You are a streambasesecured_ca6 search engine.
-      Task: Return a JSON Array of streamprotectedtrack_c-ee2 numbers (1-114) that match the user's topic.
+      You are a Quran search engine.
+      Task: Return a JSON Array of chapter numbers (1-114) that match the user's topic.
       - If specific (e.g., "Joseph"), return one: [12]
       - If broad (e.g., "Prophets"), return all relevant: [21, 12, 11, 10, ... ]
       - Order by relevance.
@@ -38,22 +38,22 @@ export async function onRequestPost(context) {
     // Remove markdown code blocks if present (e.g. ```json ... ```)
     raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    let streamprotectedtrack_cee2 = [];
+    let chapters = [];
     try {
-      streamprotectedtrack_cee2 = JSON.parse(raw);
+      chapters = JSON.parse(raw);
       // Ensure it's actually an array of numbers
-      if (!Array.isArray(streamprotectedtrack_cee2)) streamprotectedtrack_cee2 = [parseInt(raw)];
+      if (!Array.isArray(chapters)) chapters = [parseInt(raw)];
     } catch (e) {
       // Fallback: try to find any numbers in the string
       const match = raw.match(/\d+/g);
-      if (match) streamprotectedtrack_cee2 = match.map(n => parseInt(n));
+      if (match) chapters = match.map(n => parseInt(n));
     }
 
-    // Filter valid streambasesecured_ca6 streamprotectedtrack_cee2 (1-114)
-    streamprotectedtrack_cee2 = streamprotectedtrack_cee2.map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 1 && n <= 114);
+    // Filter valid Quran chapters (1-114)
+    chapters = chapters.map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 1 && n <= 114);
 
     return new Response(JSON.stringify({ 
-        streamprotectedtrack_cee2: streamprotectedtrack_cee2, // Return the list
+        chapters: chapters, // Return the list
         debug_status: "success" 
     }), {
       headers: { "Content-Type": "application/json" }

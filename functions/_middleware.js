@@ -5,35 +5,10 @@ export async function onRequest(context) {
   const lowerPath = path.toLowerCase();
 
   // =========================================================================
-  // 0. DEV BACKDOOR (LOGIN TRIGGER ONLY)
-  // =========================================================================
-  // This acts as a "Virtual Login". If the key is present, we consider the user
-  // logged in (hasPremium = true) and inject the persistent cookie.
-  // We do NOT bypass media security checks. The user is treated as a standard Premium user.
-  const DEV_PARAM = "dev_key_bypass_fortest_unauthorized_use_may_cause_legal_consequences";
-  const DEV_SECRET = "02mz01010199SosMaOIOUJINksnwiI0390jk0ihwcf02ew8uf083yfuhoh3f93";
-  const isDevBypass = url.searchParams.get(DEV_PARAM) === DEV_SECRET;
-
-  // Helper: Inject the Premium Cookie if the Backdoor Key was used.
-  // This ensures the user remains "logged in" for future requests without the key.
-  const finalize = (res) => {
-    if (isDevBypass && res) {
-      const newRes = new Response(res.body, res);
-      newRes.headers.set(
-        "Set-Cookie", 
-        "TUWA_PREMIUM=true; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=31536000"
-      );
-      return newRes;
-    }
-    return res;
-  };
-
-  // =========================================================================
   // 1. AUTHENTICATION
   // =========================================================================
   const cookieHeader = request.headers.get("Cookie");
-  // User is Premium if they have the Cookie OR if they just used the Dev Key.
-  const hasPremium = isDevBypass || (cookieHeader && cookieHeader.includes("TUWA_PREMIUM=true"));
+  const hasPremium = cookieHeader && cookieHeader.includes("TUWA_PREMIUM=true");
 
   // =========================================================================
   // 2. REQUEST TYPE DETECTION (For Anti-Scraping)
@@ -124,26 +99,24 @@ export async function onRequest(context) {
   if (lowerPath.startsWith('/media/')) {
 
     // RULE 1: Only Premium users allowed.
-    // (This works for Backdoor users too, because hasPremium is true)
-    if (!hasPremium) return finalize(new Response('Not Found', { status: 404 }));
+    if (!hasPremium) return new Response('Not Found', { status: 404 });
 
     // RULE 2: Anti-Scrape. Block direct navigations.
-    if (isDirectNav) return finalize(new Response('Access Denied', { status: 403 }));
+    if (isDirectNav) return new Response('Access Denied', { status: 403 });
 
     // Expect path: /media/{type}/{token}/{filename}
     // NOTE: do NOT lowercase the token segment — tokens are case-sensitive.
     const parts = path.split('/').filter(Boolean);
-    if (parts.length < 4) return finalize(new Response('Invalid Request', { status: 400 }));
+    if (parts.length < 4) return new Response('Invalid Request', { status: 400 });
 
     const [, rawType, tokenPart, ...rest] = parts;
     const type = (rawType || '').toLowerCase();
     const filename = rest.join('/');
 
     // Validate token
-    // STRICT MODE: Backdoor users must provide valid tokens just like everyone else.
     const verification = await verifyToken(tokenPart);
     if (!verification.ok) {
-      return finalize(new Response(`Invalid token (${verification.reason || 'unknown'})`, { status: 403 }));
+      return new Response(`Invalid token (${verification.reason || 'unknown'})`, { status: 403 });
     }
 
     const payload = verification.payload;
@@ -152,11 +125,11 @@ export async function onRequest(context) {
     const currentUa = request.headers.get('User-Agent') || '';
     const currentUaHash = await computeUaHash(currentUa);
     if ((payload.ip || '') !== currentIp || (payload.ua_hash || '') !== currentUaHash) {
-      return finalize(new Response('Link Stolen/Device Mismatch', { status: 403 }));
+      return new Response('Link Stolen/Device Mismatch', { status: 403 });
     }
     // Ensure token matches request
     if (payload.type !== type || payload.filename !== filename) {
-      return finalize(new Response('Token mismatch', { status: 403 }));
+      return new Response('Token mismatch', { status: 403 });
     }
 
     // Mark nonce as used (single-use)
@@ -185,7 +158,7 @@ export async function onRequest(context) {
     if (realSource) {
       try {
         const originalResponse = await fetch(realSource);
-        if (!originalResponse.ok) return finalize(new Response('Media Error', { status: 404 }));
+        if (!originalResponse.ok) return new Response('Media Error', { status: 404 });
 
         const newHeaders = new Headers(originalResponse.headers);
         newHeaders.delete('x-github-request-id');
@@ -196,12 +169,12 @@ export async function onRequest(context) {
         newHeaders.set('Content-Disposition', 'inline');
         newHeaders.set('Cache-Control', 'private, max-age=86400');
 
-        return finalize(new Response(originalResponse.body, {
+        return new Response(originalResponse.body, {
           status: originalResponse.status,
           headers: newHeaders
-        }));
+        });
       } catch (e) {
-        return finalize(new Response('Upstream Error', { status: 502 }));
+        return new Response('Upstream Error', { status: 502 });
       }
     }
   }
@@ -211,8 +184,7 @@ export async function onRequest(context) {
   // =========================================================================
   if (lowerPath === '/' || lowerPath === '/index.html' || lowerPath === '') {
     const targetPage = hasPremium ? '/app.html' : '/landing.html';
-    // Use finalize to ensure cookie is set if this was the login trigger
-    return finalize(await env.ASSETS.fetch(new URL(targetPage, request.url)));
+    return env.ASSETS.fetch(new URL(targetPage, request.url));
   }
 
   // =========================================================================
@@ -220,7 +192,7 @@ export async function onRequest(context) {
   // =========================================================================
   // Prevent users from bypassing the logic by typing /app.html
   if (lowerPath === '/app.html' || lowerPath === '/landing.html' || lowerPath === '/app') {
-    return finalize(Response.redirect(new URL('/', request.url), 302));
+    return Response.redirect(new URL('/', request.url), 302);
   }
 
   // =========================================================================
@@ -238,21 +210,11 @@ export async function onRequest(context) {
       '/functions/login-client.js',
       '/src/components/nav_7c6b5axjs.js', // As seen in your landing.html
       '/favicon.ico',
-      '/sw.js',
-      '/i18n.js',
-      '/locales.js',
-      '/assets/ui/err_9391za.html',
-      '/assets/js/tuwa-hibernate.js',
-      '/legal/index.html',
-      '/legal/locales.json',
-      '/legal/i18n.js',
-      '/legal/daun.me.png',
       '/manifest.json'
     ];
 
     const allowedGuestStarts = [
-      '/login',  
-      '/legal',       
+      '/login',       
       '/login-google',
       '/auth/',
       '/api/config' // Allow config if needed for guest previews (optional)
@@ -263,7 +225,7 @@ export async function onRequest(context) {
 
     if (!isAllowed) {
       // 404 makes it look like the files literally don't exist
-      return finalize(new Response("Not Found", { status: 404 }));
+      return new Response("Not Found", { status: 404 });
     }
   }
 
@@ -279,11 +241,10 @@ export async function onRequest(context) {
     
     if (isProtected && isDirectNav) {
       // If they type "tuwa.com/src/app.js" in the address bar -> BOOM, back to home.
-      return finalize(Response.redirect(new URL('/', request.url), 302));
+      return Response.redirect(new URL('/', request.url), 302);
     }
   }
 
   // Pass through to static assets or other Functions
-  // Ensure finalize is called in case next() returns a Response that needs headers.
-  return finalize(await next());
+  return next();
 }

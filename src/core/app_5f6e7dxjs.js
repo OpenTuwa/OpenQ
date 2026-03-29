@@ -14,17 +14,13 @@ document.addEventListener('error', function (event) {
 }, true);
 
 // --- 1. PLACEHOLDERS FOR SERVER DATA ---
-let streamprotected_cb2_METADATA = [];
+let SURAH_METADATA = [];
 let TRANSLATIONS_CONFIG = {};
 let RECITERS_CONFIG = {};
 
-// --- GLOBAL CACHE TO PREVENT BLINKING GAP ---
-window.preloadedAudioCache = {};
-window.preloadedImageCache = {};
-
 // --- 2. MULTI-PROFILE & LOGIC ---
 const ACTIVE_PROFILE_ID = "1";
-const STORAGE_KEY = `streambasesecured_ca6State_${ACTIVE_PROFILE_ID}`;
+const STORAGE_KEY = `quranState_${ACTIVE_PROFILE_ID}`;
 
 // Keep Audio Config here as it contains no secrets
 const TRANSLATION_AUDIO_CONFIG = {
@@ -43,20 +39,20 @@ const elements = {
     spinner: document.querySelector('._bl'),
     loaderText: document.getElementById('_dk'),
     startBtn: document.getElementById('_ek'),
-    streambasesecured_ca6Audio: document.getElementById('_cq'),
+    quranAudio: document.getElementById('_cq'),
     transAudio: document.getElementById('_e'),
     previewAudio: document.getElementById('_ca'),
     bufferInd: document.getElementById('_0'),
     selects: {
-        'streamprotectedtrack_c-ee2': document.getElementById('chapterSelectWrapper'),
-        'streamprotectedcase_c-ww2': document.getElementById('verseSelectWrapper'),
+        chapter: document.getElementById('chapterSelectWrapper'),
+        verse: document.getElementById('verseSelectWrapper'),
         trans: document.getElementById('translationSelectWrapper'),
-        streamprotectedlicense_artist_cr1: document.getElementById('reciterSelectWrapper'),
+        reciter: document.getElementById('reciterSelectWrapper'),
         transAudio: document.getElementById('translationAudioSelectWrapper')
     },
     display: {
         title: document.getElementById('_ch'),
-        'streamprotectedcase_c-ww2': document.getElementById('_do'),
+        verse: document.getElementById('_do'),
         verseNext: document.getElementById('_bh'),
         trans: document.getElementById('_au'),
         container: document.getElementById('_bd')
@@ -83,6 +79,11 @@ const elements = {
 // Global storage for cinema caption timers
 window.cinemaCaptionTimers = window.cinemaCaptionTimers || [];
 
+/**
+ * Splits translation text into chunks that end only on punctuation.
+ * Target ~25 words per chunk. If 25 words reached without punctuation,
+ * extends until the next punctuation from the specified regex.
+ */
 function getSmartChunks(text) {
     if (!text || typeof text !== 'string') return [];
     const PUNCT_RE = /[.,;?!:\"”’‘)\]،؛۔؟]/;
@@ -93,21 +94,25 @@ function getSmartChunks(text) {
     let start = 0;
 
     while (start < words.length) {
+        // If remaining words are less than or equal to TARGET, try to end at punctuation within remainder
         if (start + TARGET >= words.length) {
             chunks.push(words.slice(start).join(' '));
             break;
         }
 
         let desired = start + TARGET;
+
+        // Search forward from desired-1 for the next word that contains punctuation
         let end = -1;
         for (let j = desired - 1; j < words.length; j++) {
             if (PUNCT_RE.test(words[j])) {
-                end = j + 1; 
+                end = j + 1; // slice end is exclusive
                 break;
             }
         }
 
         if (end === -1) {
+            // No punctuation found ahead; include rest as one chunk
             chunks.push(words.slice(start).join(' '));
             break;
         }
@@ -119,6 +124,9 @@ function getSmartChunks(text) {
     return chunks;
 }
 
+/**
+ * Clear any pending cinema caption timeouts.
+ */
 function clearCinemaTimers() {
     if (window.cinemaCaptionTimers && window.cinemaCaptionTimers.length) {
         window.cinemaCaptionTimers.forEach(id => clearTimeout(id));
@@ -126,6 +134,12 @@ function clearCinemaTimers() {
     }
 }
 
+/**
+ * Play captions in 'cinema' mode by splitting `text` into smart chunks and
+ * scheduling updates to `elements.display.trans.textContent` according to
+ * chunk durations computed from `totalDuration`.
+ * `totalDuration` is expected in seconds; function will convert to ms.
+ */
 function playCinemaCaptions(text, totalDuration) {
     clearCinemaTimers();
     if (!text || typeof text !== 'string') return;
@@ -133,10 +147,12 @@ function playCinemaCaptions(text, totalDuration) {
     const chunks = getSmartChunks(text);
     if (!chunks.length) return;
 
+    // Count words
     const totalWords = text.trim().split(/\s+/).length || 1;
+
     const totalMs = (typeof totalDuration === 'number' && !isNaN(totalDuration) && totalDuration > 0)
         ? totalDuration * 1000
-        : 7000; 
+        : 7000; // fallback 7s
 
     let elapsed = 0;
     chunks.forEach(chunk => {
@@ -153,7 +169,7 @@ function playCinemaCaptions(text, totalDuration) {
     });
 }
 
-let streambasesecured_ca6Data = []; 
+let quranData = []; 
 let translationCache = {}; 
 let ttsCache = {}; 
 let currentChapterData = {};
@@ -174,12 +190,13 @@ const KEYBOARD_KEYS = [
 
 window.wipeUserData = function() {
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem('streambasesecured_ca6_user_analytics');
+    localStorage.removeItem('quran_user_analytics');
     const msg = window.t ? window.t('errors.userDataWiped') : 'User data wiped.';
     alert(msg);
     location.reload();
 };
 
+// mode: 1 = Show All (Default), 0 = Hide Chapter and Reciter
 function initCustomSelects(mode = 0) {
     if (mode === 0) {
         document.body.classList.add('_de');
@@ -293,12 +310,17 @@ function setSelectValue(wrapper, value) {
 
     if (foundText) {
         wrapper.dataset.value = value;
+
+        // IDs of wrappers that should keep their static label (e.g. "Reciter")
+        // instead of showing the selected value.
         const staticLabelIds = [
             'reciterSelectWrapper', 
             'translationSelectWrapper', 
             'translationAudioSelectWrapper'
+            // Add 'chapterSelectWrapper' or 'verseSelectWrapper' here if you want those to be static too
         ];
 
+        // Only update the trigger text if the wrapper ID is NOT in the static list
         if (!staticLabelIds.includes(wrapper.id)) {
             const trigger = wrapper.querySelector('._q');
             if(trigger) trigger.textContent = foundText;
@@ -332,9 +354,9 @@ function decodeStream(token) {
         if (parts.length < 5) return null;
 
         return {
-            'streamprotectedtrack_c-ee2': parseInt(parts[0]),
-            'streamprotectedcase_c-ww2': parseInt(parts[1]),
-            streamprotectedlicense_artist_cr1: parts[2],
+            chapter: parseInt(parts[0]),
+            verse: parseInt(parts[1]),
+            reciter: parts[2],
             trans: parts[3],
             audio_trans: parts[4]
         };
@@ -344,6 +366,7 @@ function decodeStream(token) {
     }
 }
 
+// Request a single-use tunneled URL from the server
 async function getTunneledUrl(type, filename) {
     try {
         const res = await fetch('/api/media-token', {
@@ -363,7 +386,7 @@ async function getTunneledUrl(type, filename) {
 
 function mergeMetadata(apiChapters) {
     return apiChapters.map((ch, idx) => {
-        const meta = streamprotected_cb2_METADATA.find(m => m['streamprotectedtrack_c-ee2'] === ch.chapterNumber);
+        const meta = SURAH_METADATA.find(m => m.chapter === ch.chapterNumber);
         if (meta) {
             return { ...ch, english_name: meta.english_name, description: meta.description };
         }
@@ -380,7 +403,7 @@ function switchView(viewName) {
         elements.sidebar.container.style.display = 'none';
         
         setTimeout(() => {
-            const chapterTrigger = elements.selects['streamprotectedtrack_c-ee2'].querySelector('._q');
+            const chapterTrigger = elements.selects.chapter.querySelector('._q');
             if(chapterTrigger) chapterTrigger.focus();
         }, 150);
     } else {
@@ -388,7 +411,7 @@ function switchView(viewName) {
         elements.views.cinema.style.opacity = '0';
         elements.views.dashboard.classList.add('active');
         elements.sidebar.container.style.display = 'none';
-        elements.streambasesecured_ca6Audio.pause();
+        elements.quranAudio.pause();
         elements.transAudio.pause();
         refreshDashboard();
         document.getElementById('door-play-btn').focus();
@@ -397,7 +420,7 @@ function switchView(viewName) {
 
 window.addEventListener('popstate', (event) => {
     const params = new URLSearchParams(window.location.search);
-    if (params.has('streamprotectedtrack_c-ee2') || params.has('stream')) {
+    if (params.has('chapter') || params.has('stream')) {
         switchView('cinema');
         restoreState();
         loadVerse(false);
@@ -410,64 +433,36 @@ async function initializeApp() {
     try {
         initCustomSelects();
 
+        // 1. SECURE CONFIG FETCH (REPLACES HARDCODED DATA)
         try {
             const configResponse = await fetch('/api/config');
             if(configResponse.ok) {
                 const configData = await configResponse.json();
-                streamprotected_cb2_METADATA = configData.streamprotectedtrack_cee2;
+                SURAH_METADATA = configData.chapters;
                 TRANSLATIONS_CONFIG = configData.translations;
-                RECITERS_CONFIG = configData.streamprotectedlicense_artists_cr1;
+                RECITERS_CONFIG = configData.reciters;
             } else {
                 throw new Error("Failed to load secure config");
             }
         } catch(e) {
             console.error("Config Load Failed", e);
+            // Fallback could go here if needed
         }
 
-        const jsonResponse = await fetch('/assets/data/translations/2TM3TM.json');
-        if (!jsonResponse.ok) throw new Error("Failed to load streambasesecured_ca6 JSON");
+        const jsonResponse = await fetch('https://cdn.jsdelivr.net/gh/Quran-lite-pages-dev/Quran-lite.pages.dev@refs/heads/master/assets/data/translations/2TM3TM.json');
+        if (!jsonResponse.ok) throw new Error("Failed to load Quran JSON");
         const jsonData = await jsonResponse.json();
-
-        // Normalize different possible JSON shapes to the internal expected schema.
-        let rawChapters = jsonData.streamprotectedtrack_cee2 || jsonData.chapters || jsonData;
-        if (!Array.isArray(rawChapters)) {
-            // If the JSON root contains a named wrapper, try to find the chapters array inside.
-            for (const key of Object.keys(jsonData || {})) {
-                if (Array.isArray(jsonData[key])) {
-                    rawChapters = jsonData[key];
-                    break;
-                }
-            }
-        }
-
-        if (!Array.isArray(rawChapters)) throw new Error("Chapter data missing or malformed");
-
-        const normalized = rawChapters.map(ch => {
-            const verses = ch.streamprotectedcase_cww2 || ch.verses || ch.ayas || ch.aya || [];
-            const mappedVerses = Array.isArray(verses) ? verses.map(v => ({
-                verseNumber: v.verseNumber || v.index || v.number || v.aya || null,
-                startTime: v.startTime || v.start || v.s || null,
-                endTime: v.endTime || v.end || v.e || null
-            })) : [];
-
-            return {
-                chapterNumber: ch.chapterNumber || ch.chapter || ch.id || null,
-                title: ch.title || ch.name || ch.english_name || '',
-                streamprotectedcase_cww2: mappedVerses,
-                // keep any other properties (audioURL, totalDuration, etc.)
-                ...ch
-            };
-        });
-
-        streambasesecured_ca6Data = mergeMetadata(normalized);
+        
+        // Now it's safe to use mergeMetadata because SURAH_METADATA is loaded
+        quranData = mergeMetadata(jsonData.chapters);
 
         try {
             const fttResp = await fetch(FTT_URL);
             if (fttResp.ok) {
                 const fttText = await fttResp.text();
                 const fttDoc = new DOMParser().parseFromString(fttText, 'application/xml');
-                fttDoc.querySelectorAll('streamprotectedcase_c-ww2').forEach(v => {
-                    const c = v.getAttribute('streamprotectedtrack_c-ee2')?.trim();
+                fttDoc.querySelectorAll('Verse').forEach(v => {
+                    const c = v.getAttribute('chapter')?.trim();
                     const n = v.getAttribute('number')?.trim();
                     if(c && n) forbiddenToTranslateSet.add(`${c}-${n}`);
                 });
@@ -481,12 +476,12 @@ async function initializeApp() {
         restoreState();
 
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('streamprotectedtrack_c-ee2') || urlParams.has('stream')) {
+        if (urlParams.has('chapter') || urlParams.has('stream')) {
             switchView('cinema');
             populateVerseSelect(); 
             
             const savedVerse = getSavedVerseIndex();
-            setSelectValue(elements.selects['streamprotectedcase_c-ww2'], savedVerse);
+            setSelectValue(elements.selects.verse, savedVerse);
 
             const activeTransId = getSelectValue(elements.selects.trans);
             await loadTranslationData(activeTransId);
@@ -513,6 +508,7 @@ async function initializeApp() {
     }
 }
 
+// --- UPDATED: DASHBOARD LOGIC (SINGLE FISH MODE & INFINITE SCROLL) ---
 function refreshDashboard() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
     const heroBtn = document.getElementById('door-play-btn');
@@ -524,11 +520,11 @@ function refreshDashboard() {
     const combinedIndices = [...trendingIndices, ...shortRowIndices, ...allIndices];
     fillRow('_ex', combinedIndices);
 
-    if(saved['streamprotectedtrack_c-ee2'] !== undefined && streambasesecured_ca6Data[saved['streamprotectedtrack_c-ee2']]) {
-        const chNum = streambasesecured_ca6Data[saved['streamprotectedtrack_c-ee2']].chapterNumber;
-        const vNum = (saved['streamprotectedcase_c-ww2'] || 0) + 1;
-        const streamprotectedlicense_artist_cr1 = saved.streamprotectedlicense_artist_cr1 || 'alafasy';
-        updateHeroPreview(chNum, vNum, streamprotectedlicense_artist_cr1, false);
+    if(saved.chapter !== undefined && quranData[saved.chapter]) {
+        const chNum = quranData[saved.chapter].chapterNumber;
+        const vNum = (saved.verse || 0) + 1;
+        const reciter = saved.reciter || 'alafasy';
+        updateHeroPreview(chNum, vNum, reciter, false);
         heroBtn.onclick = () => launchPlayer(chNum, vNum);
     } else {
         updateHeroPreview(1, 1, 'alafasy', false);
@@ -543,15 +539,15 @@ function fillRow(elementId, indexArray) {
     const fragment = document.createDocumentFragment();
     
     indexArray.forEach(idx => {
-        if(!streambasesecured_ca6Data[idx]) return;
-        const streamprotected_cb2 = streambasesecured_ca6Data[idx];
+        if(!quranData[idx]) return;
+        const surah = quranData[idx];
         const card = document.createElement('div');
         card.className = '_dw';
         card.tabIndex = 0;
         
-        let cardTitle = streamprotected_cb2.english_name;
+        let cardTitle = surah.english_name;
         if (window.t) {
-            const translatedKey = 'streamprotected_cb2Names.' + streamprotected_cb2.english_name;
+            const translatedKey = 'surahNames.' + surah.english_name;
             const translatedName = window.t(translatedKey);
             if (translatedName && translatedName !== translatedKey) {
                 cardTitle = translatedName;
@@ -559,12 +555,12 @@ function fillRow(elementId, indexArray) {
         }
         
         card.innerHTML = `
-            <div class="_c5">${streamprotected_cb2.chapterNumber}</div>
+            <div class="_c5">${surah.chapterNumber}</div>
             <div class="_ds">${cardTitle}</div>
-            <div class="_er">${streamprotected_cb2.title || ''}</div>
+            <div class="_er">${surah.title || ''}</div>
         `;
-        card.onclick = () => launchPlayer(streamprotected_cb2.chapterNumber, 1);
-        card.onfocus = () => { schedulePreview(streamprotected_cb2.chapterNumber); };
+        card.onclick = () => launchPlayer(surah.chapterNumber, 1);
+        card.onfocus = () => { schedulePreview(surah.chapterNumber); };
         fragment.appendChild(card);
     });
     
@@ -617,12 +613,12 @@ function initInfiniteRowNavigation(container) {
 function schedulePreview(chapterNum) {
     if (previewTimeout) clearTimeout(previewTimeout);
     stopPreview();
-    const streamprotected_cb2 = streambasesecured_ca6Data[chapterNum - 1];
+    const surah = quranData[chapterNum - 1];
     
-    let heroTitle = streamprotected_cb2.english_name;
+    let heroTitle = surah.english_name;
     if (window.t) {
-        const translatedName = window.t(`streamprotected_cb2Names.${streamprotected_cb2.english_name}`);
-        if (translatedName && translatedName !== `streamprotected_cb2Names.${streamprotected_cb2.english_name}`) {
+        const translatedName = window.t(`surahNames.${surah.english_name}`);
+        if (translatedName && translatedName !== `surahNames.${surah.english_name}`) {
             heroTitle = translatedName;
         }
     }
@@ -638,19 +634,13 @@ function schedulePreview(chapterNum) {
         doorHero.textContent = heroTitle;
     }
 
-    const titleEl = document.getElementById('_aa');
-    if (titleEl) titleEl.textContent = streamprotected_cb2.title;
-
-    const playBtn = document.getElementById('door-play-btn');
-    if (playBtn) {
-        playBtn.onclick = () => launchPlayer(chapterNum, 1);
-    }
+    document.getElementById('_aa').textContent = surah.title;
+    document.getElementById('door-play-btn').onclick = () => launchPlayer(chapterNum, 1);
 
     previewTimeout = setTimeout(() => {
         updateHeroPreview(chapterNum, 1, 'alafasy', true); 
     }, PREVIEW_DELAY);
 }
-
 function stopPreview() {
     elements.previewAudio.pause();
     elements.previewAudio.onended = null;
@@ -664,15 +654,16 @@ async function updateHeroPreview(chapterNum, startVerse, reciterId, autoPlay) {
     previewSeqIndex = 0;
     
     const chIdx = chapterNum - 1;
-    if (!streambasesecured_ca6Data[chIdx]) return;
+    if (!quranData[chIdx]) return;
     
-    const totalVerses = streambasesecured_ca6Data[chIdx].streamprotectedcase_cww2.length;
+    const totalVerses = quranData[chIdx].verses.length;
     for (let i = 1; i <= totalVerses; i++) {
         previewSequence.push(i);
     }
 
     const verseNum = previewSequence[0];
     
+    // SECURE FIX: Use the tunnel
     const filename = `${chapterNum}_${verseNum}.png`;
     const tempImg = new Image();
     (async () => {
@@ -696,6 +687,7 @@ async function updateHeroPreview(chapterNum, startVerse, reciterId, autoPlay) {
 }
 
 function playPreviewStep(chapterNum, reciterId) {
+    // make async so we can request tokens
     return (async function _play() {
         try {
             if (previewSeqIndex >= previewSequence.length) return;
@@ -706,6 +698,7 @@ function playPreviewStep(chapterNum, reciterId) {
             const imgLayer = document.getElementById('_af');
             const previewImg = document.getElementById('_c7');
 
+            // SECURE FIX: Use the tunnel
             const newSrcFilename = `${chapterNum}_${verseNum}.png`;
             const newSrc = await getTunneledUrl('image', newSrcFilename);
 
@@ -721,7 +714,7 @@ function playPreviewStep(chapterNum, reciterId) {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
             const transId = saved.trans || 'en';
             const cache = translationCache[transId];
-            
+            /* --- START BRIDGE TO LYRICS ENGINE --- */
             if (cache) {
                 const sura = cache.querySelector(`sura[index="${chapterNum}"]`);
                 const aya = sura ? sura.querySelector(`aya[index="${verseNum}"]`) : null;
@@ -750,7 +743,7 @@ function playPreviewStep(chapterNum, reciterId) {
                     adjustFontSize(elements.display.trans);
                 }
             }
-            
+            /* --- END BRIDGE --- */
             const rPath = RECITERS_CONFIG[reciterId]?.path || RECITERS_CONFIG['alafasy'].path;
             const audioFilename = `${padCh}${padV}.mp3`;
             const audioUrl = await getTunneledUrl('audio', audioFilename);
@@ -771,7 +764,7 @@ function launchPlayer(chapterNum, verseNum = 1) {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
     const browserLang = navigator.language.split('-')[0];
 
-    let currentReciter = getSelectValue(elements.selects.streamprotectedlicense_artist_cr1) || saved.streamprotectedlicense_artist_cr1 || 'alafasy';
+    let currentReciter = getSelectValue(elements.selects.reciter) || saved.reciter || 'alafasy';
     
     let currentTrans = getSelectValue(elements.selects.trans) || saved.trans || browserLang;
     if (!TRANSLATIONS_CONFIG[currentTrans]) currentTrans = 'en';
@@ -804,6 +797,7 @@ async function loadTranslationData(id) {
     try {
         toggleBuffering(true);
         let url = TRANSLATIONS_CONFIG[id].url;
+        // If URL uses the /media/data tunnel, request a token first
         if (url.startsWith('/media/data/')) {
             const filename = url.split('/media/data/')[1];
             const tunneled = await getTunneledUrl('data', filename);
@@ -834,24 +828,24 @@ function restoreState() {
 
     let ch = 0;
     if (streamData) {
-        ch = streamData['streamprotectedtrack_c-ee2'] - 1; 
-    } else if (urlParams.has('streamprotectedtrack_c-ee2')) {
-        ch = parseInt(urlParams.get('streamprotectedtrack_c-ee2')) - 1; 
-    } else if (saved['streamprotectedtrack_c-ee2'] !== undefined) {
-        ch = saved['streamprotectedtrack_c-ee2'];
+        ch = streamData.chapter - 1; 
+    } else if (urlParams.has('chapter')) {
+        ch = parseInt(urlParams.get('chapter')) - 1; 
+    } else if (saved.chapter !== undefined) {
+        ch = saved.chapter;
     }
     if (isNaN(ch) || ch < 0) ch = 0;
-    setSelectValue(elements.selects['streamprotectedtrack_c-ee2'], ch);
+    setSelectValue(elements.selects.chapter, ch);
 
     let rec = 'alafasy';
-    if (streamData && RECITERS_CONFIG[streamData.streamprotectedlicense_artist_cr1]) {
-        rec = streamData.streamprotectedlicense_artist_cr1;
-    } else if (urlParams.has('streamprotectedlicense_artist_cr1') && RECITERS_CONFIG[urlParams.get('streamprotectedlicense_artist_cr1')]) {
-        rec = urlParams.get('streamprotectedlicense_artist_cr1');
-    } else if (saved.streamprotectedlicense_artist_cr1) {
-        rec = saved.streamprotectedlicense_artist_cr1;
+    if (streamData && RECITERS_CONFIG[streamData.reciter]) {
+        rec = streamData.reciter;
+    } else if (urlParams.has('reciter') && RECITERS_CONFIG[urlParams.get('reciter')]) {
+        rec = urlParams.get('reciter');
+    } else if (saved.reciter) {
+        rec = saved.reciter;
     }
-    setSelectValue(elements.selects.streamprotectedlicense_artist_cr1, rec);
+    setSelectValue(elements.selects.reciter, rec);
 
     let trans = 'en';
     if (streamData) {
@@ -895,30 +889,30 @@ function getSavedVerseIndex() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('stream')) {
         const data = decodeStream(urlParams.get('stream'));
-        if (data) return data['streamprotectedcase_c-ww2'] - 1; 
+        if (data) return data.verse - 1; 
     }
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-    if (urlParams.has('streamprotectedcase_c-ww2')) return parseInt(urlParams.get('streamprotectedcase_c-ww2')) - 1;
-    if (saved['streamprotectedcase_c-ww2'] !== undefined) return saved['streamprotectedcase_c-ww2'];
+    if (urlParams.has('verse')) return parseInt(urlParams.get('verse')) - 1;
+    if (saved.verse !== undefined) return saved.verse;
     return 0;
 }
 
 function saveState() {
     const state = {
-        'streamprotectedtrack_c-ee2': parseInt(getSelectValue(elements.selects['streamprotectedtrack_c-ee2'])),
-        'streamprotectedcase_c-ww2': parseInt(getSelectValue(elements.selects['streamprotectedcase_c-ww2'])),
-        streamprotectedlicense_artist_cr1: getSelectValue(elements.selects.streamprotectedlicense_artist_cr1),
+        chapter: parseInt(getSelectValue(elements.selects.chapter)),
+        verse: parseInt(getSelectValue(elements.selects.verse)),
+        reciter: getSelectValue(elements.selects.reciter),
         trans: getSelectValue(elements.selects.trans),
         audio_trans: getSelectValue(elements.selects.transAudio)
     };
     
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-    const chObj = streambasesecured_ca6Data[state['streamprotectedtrack_c-ee2']];
+    const chObj = quranData[state.chapter];
     const chNum = chObj.chapterNumber;
-    const vNum = chObj.streamprotectedcase_cww2[state['streamprotectedcase_c-ww2']].verseNumber;
+    const vNum = chObj.verses[state.verse].verseNumber;
     
-    const streamToken = encodeStream(chNum, vNum, state.streamprotectedlicense_artist_cr1, state.trans, state.audio_trans);
+    const streamToken = encodeStream(chNum, vNum, state.reciter, state.trans, state.audio_trans);
     const newUrl = `?stream=${streamToken}`;
 
     window.history.replaceState({path: newUrl, view: 'cinema'}, '', newUrl);
@@ -942,10 +936,10 @@ function saveState() {
 }
 
 function populateChapterSelect() {
-    const items = streambasesecured_ca6Data.map((c, i) => {
+    const items = quranData.map((c, i) => {
         let title = c.english_name;
         if (window.t) {
-            const translatedKey = 'streamprotected_cb2Names.' + c.english_name;
+            const translatedKey = 'surahNames.' + c.english_name;
             const translatedName = window.t(translatedKey);
             if (translatedName && translatedName !== translatedKey) {
                 title = translatedName;
@@ -957,22 +951,22 @@ function populateChapterSelect() {
         };
     });
     
-    populateCustomSelect(elements.selects['streamprotectedtrack_c-ee2'], items, (val) => {
+    populateCustomSelect(elements.selects.chapter, items, (val) => {
         populateVerseSelect(); 
         loadVerse(true);
     });
 }
 
 function populateVerseSelect() {
-    const chIdx = getSelectValue(elements.selects['streamprotectedtrack_c-ee2']) || 0;
-    currentChapterData = streambasesecured_ca6Data[chIdx];
+    const chIdx = getSelectValue(elements.selects.chapter) || 0;
+    currentChapterData = quranData[chIdx];
     
-    const items = currentChapterData.streamprotectedcase_cww2.map((v, i) => ({
+    const items = currentChapterData.verses.map((v, i) => ({
         value: i,
         text: `${v.verseNumber}`
     }));
 
-    populateCustomSelect(elements.selects['streamprotectedcase_c-ww2'], items, (val) => {
+    populateCustomSelect(elements.selects.verse, items, (val) => {
         loadVerse(true);
     });
 }
@@ -982,7 +976,7 @@ function populateReciterSelect() {
         value: k,
         text: v.name
     }));
-    populateCustomSelect(elements.selects.streamprotectedlicense_artist_cr1, items, (val) => {
+    populateCustomSelect(elements.selects.reciter, items, (val) => {
         saveState();
         loadVerse(true);
     });
@@ -1002,12 +996,12 @@ function populateTranslationAudioSelect() {
         };
     });
     populateCustomSelect(elements.selects.transAudio, items, (val) => {
-        const chIdx = getSelectValue(elements.selects['streamprotectedtrack_c-ee2']);
-        const vIdx = getSelectValue(elements.selects['streamprotectedcase_c-ww2']);
-        const ch = streambasesecured_ca6Data[chIdx].chapterNumber;
-        const v = streambasesecured_ca6Data[chIdx].streamprotectedcase_cww2[vIdx].verseNumber;
+        const chIdx = getSelectValue(elements.selects.chapter);
+        const vIdx = getSelectValue(elements.selects.verse);
+        const ch = quranData[chIdx].chapterNumber;
+        const v = quranData[chIdx].verses[vIdx].verseNumber;
         
-        if (!elements.streambasesecured_ca6Audio.paused) {
+        if (!elements.quranAudio.paused) {
             updateTranslationAudio(ch, v, false);
         } else if (!elements.transAudio.paused) {
             updateTranslationAudio(ch, v, true);
@@ -1027,10 +1021,10 @@ function populateTranslationSelectOptions() {
         const activeTransId = val;
         await loadTranslationData(activeTransId); 
         
-        const chIdx = getSelectValue(elements.selects['streamprotectedtrack_c-ee2']);
-        const vIdx = getSelectValue(elements.selects['streamprotectedcase_c-ww2']);
-        const ch = streambasesecured_ca6Data[chIdx].chapterNumber;
-        const v = streambasesecured_ca6Data[chIdx].streamprotectedcase_cww2[vIdx].verseNumber;
+        const chIdx = getSelectValue(elements.selects.chapter);
+        const vIdx = getSelectValue(elements.selects.verse);
+        const ch = quranData[chIdx].chapterNumber;
+        const v = quranData[chIdx].verses[vIdx].verseNumber;
         updateTranslationText(ch, v);
         saveState();
     });
@@ -1042,16 +1036,16 @@ function toggleBuffering(show) {
 }
 
 async function loadVerse(autoplay = true) {
-    const chIdx = getSelectValue(elements.selects['streamprotectedtrack_c-ee2']);
-    const vIdx = getSelectValue(elements.selects['streamprotectedcase_c-ww2']);
+    const chIdx = getSelectValue(elements.selects.chapter);
+    const vIdx = getSelectValue(elements.selects.verse);
     
-    currentChapterData = streambasesecured_ca6Data[chIdx];
+    currentChapterData = quranData[chIdx];
 
     const splashTitle = document.getElementById('doorz-hero-title');
     if (splashTitle) {
         let displayTitle = currentChapterData.english_name;
         if (window.t) {
-            const translatedKey = 'streamprotected_cb2Names.' + displayTitle;
+            const translatedKey = 'surahNames.' + displayTitle;
             const translatedName = window.t(translatedKey);
             if (translatedName && translatedName !== translatedKey) {
                 displayTitle = translatedName;
@@ -1060,7 +1054,7 @@ async function loadVerse(autoplay = true) {
         splashTitle.textContent = displayTitle;
     }
 
-    const verseData = currentChapterData.streamprotectedcase_cww2[vIdx];
+    const verseData = currentChapterData.verses[vIdx];
     const chNum = currentChapterData.chapterNumber;
     const vNum = verseData.verseNumber;
     const verseKey = `${chNum}-${vNum}`;
@@ -1068,14 +1062,9 @@ async function loadVerse(autoplay = true) {
 
     elements.display.title.innerHTML = `${currentChapterData.title} <span class="_ar">(${chNum}:${vNum})</span>`;
     
-    // --- LOAD FROM CACHE FIRST TO PREVENT BLINK ---
-    let newSrc = window.preloadedImageCache[verseKey];
-    if (!newSrc) {
-        const newSrcFilename = `${chNum}_${vNum}.png`;
-        newSrc = await getTunneledUrl('image', newSrcFilename);
-    }
-    
-    const img1 = elements.display['streamprotectedcase_c-ww2'];
+    const newSrcFilename = `${chNum}_${vNum}.png`;
+    const newSrc = await getTunneledUrl('image', newSrcFilename);
+    const img1 = elements.display.verse;
     const img2 = elements.display.verseNext;
 
     let imgReady = false;
@@ -1105,14 +1094,13 @@ async function loadVerse(autoplay = true) {
         await loadTranslationData(tid);
     }
 
-    // FIX: Audio updated BEFORE text to prevent 'pause' event from clearing text timers
-    await updatestreambasesecured_ca6Audio(chNum, vNum, autoplay);
-
     if (isForbidden) {
         elements.display.trans.textContent = '';
     } else {
         updateTranslationText(chNum, vNum);
     }
+
+    await updateQuranAudio(chNum, vNum, autoplay);
     
     if (isForbidden) {
         elements.transAudio.src = '';
@@ -1121,14 +1109,40 @@ async function loadVerse(autoplay = true) {
     }
 
     saveState(); 
-    updateMediaSession(currentChapterData.title, vNum, RECITERS_CONFIG[getSelectValue(elements.selects.streamprotectedlicense_artist_cr1)].name);
+    updateMediaSession(currentChapterData.title, vNum, RECITERS_CONFIG[getSelectValue(elements.selects.reciter)].name);
     bufferNextResources(chIdx, parseInt(vIdx));
 }
 
 function bufferNextResources(currentChIdx, currentVIdx) {
-    // Disabled pre-caching to prevent burning single-use media tokens.
-    // Audio and images will now request a fresh token at the exact moment of playback.
-    return;
+    return (async function _buffer() {
+        let nextChIdx = parseInt(currentChIdx);
+        let nextVIdx = currentVIdx + 1;
+    
+    if (nextVIdx >= quranData[nextChIdx].verses.length) {
+        nextChIdx = nextChIdx + 1;
+        nextVIdx = 0;
+    }
+
+    if (nextChIdx >= quranData.length) return; 
+
+        const nextCh = quranData[nextChIdx].chapterNumber;
+        const nextV = quranData[nextChIdx].verses[nextVIdx].verseNumber;
+
+        // SECURE FIX: Use the tunnel
+        const img = new Image();
+        const imgFile = `${nextCh}_${nextV}.png`;
+        const imgUrl = await getTunneledUrl('image', imgFile);
+        if (imgUrl) img.src = imgUrl;
+
+        const rId = getSelectValue(elements.selects.reciter);
+        const padCh = String(nextCh).padStart(3, '0');
+        const padV = String(nextV).padStart(3, '0');
+        const aud = new Audio();
+        const audFile = `${padCh}${padV}.mp3`;
+        const audUrl = await getTunneledUrl('audio', audFile);
+        if (audUrl) aud.src = audUrl;
+        aud.preload = 'auto';
+    })();
 }
 
 function updateTranslationText(chNum, vNum) {
@@ -1143,8 +1157,10 @@ function updateTranslationText(chNum, vNum) {
     const unavailableText = window.t ? window.t('errors.translationUnavailable') : "Translation unavailable";
     const fullText = aya ? aya.getAttribute('text') : unavailableText;
 
+    // If cinema view is active, play smart-chunked captions over audio duration
     if (elements.views.cinema && elements.views.cinema.classList.contains('active')) {
-        const qdur = Number(elements.streambasesecured_ca6Audio && elements.streambasesecured_ca6Audio.duration) || 0;
+        // Prefer Quran audio duration; fallback to translation audio; else 7s
+        const qdur = Number(elements.quranAudio && elements.quranAudio.duration) || 0;
         const tdur = Number(elements.transAudio && elements.transAudio.duration) || 0;
         const totalDuration = (qdur > 0) ? qdur : (tdur > 0 ? tdur : 7);
         playCinemaCaptions(fullText, totalDuration);
@@ -1155,52 +1171,17 @@ function updateTranslationText(chNum, vNum) {
     }
 }
 
-async function updatestreambasesecured_ca6Audio(chNum, vNum, play) {
+async function updateQuranAudio(chNum, vNum, play) {
     try {
-        const verseKey = `${chNum}-${vNum}`;
-        let url = window.preloadedAudioCache[verseKey];
-        
-        // If not cached, fetch it normally
-        if (!url) {
-            const padCh = String(chNum).padStart(3, '0');
-            const padV = String(vNum).padStart(3, '0');
-            const filename = `${padCh}${padV}.mp3`;
-            url = await getTunneledUrl('audio', filename);
-        }
-
-        if (url) {
-            const audioEl = elements.streambasesecured_ca6Audio;
-            audioEl.src = url;
-            // Clean up cache memory
-            delete window.preloadedAudioCache[verseKey];
-            delete window.preloadedImageCache[verseKey];
-
-            if (play) {
-                try {
-                    await audioEl.play();
-                } catch (e) {
-                    console.log('Initial play failed, will retry on canplay/canplaythrough', e);
-
-                    const tryPlay = () => {
-                        audioEl.play().catch(() => {});
-                    };
-
-                    const onCanPlay = () => {
-                        tryPlay();
-                        audioEl.removeEventListener('canplay', onCanPlay);
-                        audioEl.removeEventListener('canplaythrough', onCanPlay);
-                    };
-
-                    audioEl.addEventListener('canplay', onCanPlay);
-                    audioEl.addEventListener('canplaythrough', onCanPlay);
-
-                    // Fallback retry after a short delay
-                    setTimeout(() => tryPlay(), 700);
-                }
-            }
-        }
+        const rId = getSelectValue(elements.selects.reciter);
+        const padCh = String(chNum).padStart(3, '0');
+        const padV = String(vNum).padStart(3, '0');
+        const filename = `${padCh}${padV}.mp3`;
+        const url = await getTunneledUrl('audio', filename);
+        if (url) elements.quranAudio.src = url;
+        if (play) elements.quranAudio.play().catch(e => console.log('Waiting for user interaction'));
     } catch (e) {
-        console.error('Failed to set streambasesecured_ca6 audio', e);
+        console.error('Failed to set quran audio', e);
     }
 }
 
@@ -1208,12 +1189,12 @@ async function updateTranslationAudio(chNum, vNum, play) {
     return;
 }
 
-function handlestreambasesecured_ca6End() {
+function handleQuranEnd() {
     nextVerse();
 }
 
 function nextVerse() {
-    const verseWrapper = elements.selects['streamprotectedcase_c-ww2'];
+    const verseWrapper = elements.selects.verse;
     const totalV = verseWrapper.querySelectorAll('._b5').length;
     let cV = parseInt(getSelectValue(verseWrapper));
     
@@ -1221,7 +1202,7 @@ function nextVerse() {
         setSelectValue(verseWrapper, cV + 1);
         loadVerse(true);
     } else {
-        const chapterWrapper = elements.selects['streamprotectedtrack_c-ee2'];
+        const chapterWrapper = elements.selects.chapter;
         let cC = parseInt(getSelectValue(chapterWrapper));
         const totalC = chapterWrapper.querySelectorAll('._b5').length;
         
@@ -1255,26 +1236,13 @@ function setupEventListeners() {
         loadVerse(true); 
     });
 
-    elements.streambasesecured_ca6Audio.addEventListener('ended', handlestreambasesecured_ca6End);
+    elements.quranAudio.addEventListener('ended', handleQuranEnd);
     elements.transAudio.addEventListener('ended', nextVerse);
 
-    elements.streambasesecured_ca6Audio.addEventListener('playing', () => {
-        if ('mediaSession' in navigator) {
-            try {
-                navigator.mediaSession.setPositionState({
-                    duration: Infinity,
-                    playbackRate: elements.streambasesecured_ca6Audio.playbackRate || 1.0,
-                    position: 0 
-                });
-            } catch (e) {
-                console.warn("Media Session Live trick failed", e);
-            }
-        }
-    });
-
-    elements.streambasesecured_ca6Audio.addEventListener('pause', clearCinemaTimers);
+    // Clear cinema caption timers when audio is paused or ends
+    elements.quranAudio.addEventListener('pause', clearCinemaTimers);
     elements.transAudio.addEventListener('pause', clearCinemaTimers);
-    elements.streambasesecured_ca6Audio.addEventListener('ended', clearCinemaTimers);
+    elements.quranAudio.addEventListener('ended', clearCinemaTimers);
     elements.transAudio.addEventListener('ended', clearCinemaTimers);
 
     ['mousemove', 'touchstart', 'click', 'keydown'].forEach(e => 
@@ -1296,9 +1264,9 @@ function setupEventListeners() {
     });
 }
 
-let currentstreamprotected_cb2Title = "";
+let currentSurahTitle = "";
 
-function updateMediaSession(streamprotected_cb2, streamprotectedcase_cww2, artist) {
+function updateMediaSession(surah, verse, artist) {
     function shouldDisableMediaSession() {
         try {
             if (window.__DISABLE_MEDIA_SESSION__ === true) return true;
@@ -1311,18 +1279,19 @@ function updateMediaSession(streamprotected_cb2, streamprotectedcase_cww2, artis
         if ('mediaSession' in navigator) {
             try {
                 navigator.mediaSession.metadata = null;
+                // Clear common handlers to prevent OS media controls from reacting
                 const handlers = ['play','pause','previoustrack','nexttrack','seekbackward','seekforward','seekto'];
                 handlers.forEach(h => {
                     try { navigator.mediaSession.setActionHandler(h, null); } catch (e) {}
                 });
             } catch (e) {}
         }
-        currentstreamprotected_cb2Title = '';
+        currentSurahTitle = '';
         return;
     }
 
     if ('mediaSession' in navigator) {
-        if (streamprotected_cb2 === currentstreamprotected_cb2Title) {
+        if (surah === currentSurahTitle) {
             return;
         }
 
@@ -1334,9 +1303,10 @@ function updateMediaSession(streamprotected_cb2, streamprotectedcase_cww2, artis
         });
 
         navigator.mediaSession.setActionHandler('nexttrack', () => {
+            // Logic handled by app state
         });
 
-        currentstreamprotected_cb2Title = streamprotected_cb2;
+        currentSurahTitle = surah;
     }
 }
 
@@ -1345,7 +1315,7 @@ function initSearchInterface() {
     elements.search.resultsGrid.addEventListener('click', (e) => {
         const card = e.target.closest('._dw');
         if(card) {
-            const ch = parseInt(card.dataset['streamprotectedtrack_c-ee2']);
+            const ch = parseInt(card.dataset.chapter);
             closeSearch();
             launchPlayer(ch, 1);
         }
@@ -1410,7 +1380,7 @@ function closeSearch() {
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (window.location.href.includes("streamprotectedtrack_c-ee2") || window.location.href.includes("stream")) {
+    if (window.location.href.includes("chapter") || window.location.href.includes("stream")) {
         return; 
     }
     const row = document.getElementById("_ex");
@@ -1448,7 +1418,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 (function() {
     const targetId = '_j';
-    const keywords = ['stream', 'streamprotectedtrack_c-ee2'];
+    const keywords = ['stream', 'chapter'];
 
     const hideElement = () => {
         const url = window.location.href.toLowerCase();
@@ -1502,11 +1472,10 @@ window.addEventListener('popstate', forceRemoveFadeLayer);
 forceRemoveFadeLayer();
 
 let pendingSeekOffset = null; 
-let seekCooldown = false; // Debounce flag to prevent rapid mashing crashes
 
-elements.streambasesecured_ca6Audio.addEventListener('loadedmetadata', () => {
+elements.quranAudio.addEventListener('loadedmetadata', () => {
     if (pendingSeekOffset !== null) {
-        const duration = elements.streambasesecured_ca6Audio.duration;
+        const duration = elements.quranAudio.duration;
         let newTime = 0;
 
         if (pendingSeekOffset.direction === 'backward') {
@@ -1515,8 +1484,8 @@ elements.streambasesecured_ca6Audio.addEventListener('loadedmetadata', () => {
             newTime = Math.min(duration, pendingSeekOffset.remainder);
         }
 
-        elements.streambasesecured_ca6Audio.currentTime = newTime;
-        elements.streambasesecured_ca6Audio.play().catch(e => console.log("Auto-resume after seek"));
+        elements.quranAudio.currentTime = newTime;
+        elements.quranAudio.play().catch(e => console.log("Auto-resume after seek"));
         pendingSeekOffset = null; 
     }
 
@@ -1533,15 +1502,8 @@ elements.streambasesecured_ca6Audio.addEventListener('loadedmetadata', () => {
 });
 
 window.smartSeek = function(seconds) {
-    // 1. Debounce check: Exit immediately if a seek just happened
-    if (seekCooldown) return;
-    
-    const audio = elements.streambasesecured_ca6Audio;
+    const audio = elements.quranAudio;
     if (!audio || isNaN(audio.duration)) return;
-
-    // 2. Lock seeking for 250ms
-    seekCooldown = true;
-    setTimeout(() => { seekCooldown = false; }, 250);
 
     const currentT = audio.currentTime;
     const duration = audio.duration;
@@ -1552,26 +1514,24 @@ window.smartSeek = function(seconds) {
         return;
     }
 
-    // THE FIX: Parse strings into integers so math (+ 1) works correctly.
-    const currentVIdx = parseInt(getSelectValue(elements.selects['streamprotectedcase_c-ww2']), 10);
-    const currentChIdx = parseInt(getSelectValue(elements.selects['streamprotectedtrack_c-ee2']), 10);
-
     if (targetT < 0) {
         const remainder = Math.abs(targetT); 
+        const currentVIdx = getSelectValue(elements.selects.verse);
+        const currentChIdx = getSelectValue(elements.selects.chapter); 
 
         if (currentVIdx > 0) {
             const prevVIdx = currentVIdx - 1;
-            setSelectValue(elements.selects['streamprotectedcase_c-ww2'], prevVIdx);
+            setSelectValue(elements.selects.verse, prevVIdx);
             pendingSeekOffset = { direction: 'backward', remainder: remainder };
             triggerVerseChange();
         } 
         else if (currentChIdx > 0) {
             const prevChIdx = currentChIdx - 1;
-            setSelectValue(elements.selects['streamprotectedtrack_c-ee2'], prevChIdx);
-            const prevChapterData = streambasesecured_ca6Data[prevChIdx]; 
-            const lastVerseIdx = prevChapterData.streamprotectedcase_cww2.length - 1;
+            setSelectValue(elements.selects.chapter, prevChIdx);
+            const prevChapterData = quranData[prevChIdx]; 
+            const lastVerseIdx = prevChapterData.verses.length - 1;
             populateVerseSelect(); 
-            setSelectValue(elements.selects['streamprotectedcase_c-ww2'], lastVerseIdx);
+            setSelectValue(elements.selects.verse, lastVerseIdx);
             pendingSeekOffset = { direction: 'backward', remainder: remainder };
             triggerVerseChange();
         } 
@@ -1581,23 +1541,25 @@ window.smartSeek = function(seconds) {
     }
     else if (targetT > duration) {
         const remainder = targetT - duration; 
-        const totalVersesInCh = streambasesecured_ca6Data[currentChIdx].streamprotectedcase_cww2.length;
+        const currentVIdx = getSelectValue(elements.selects.verse);
+        const currentChIdx = getSelectValue(elements.selects.chapter);
+        const totalVersesInCh = quranData[currentChIdx].verses.length;
 
         if (currentVIdx < totalVersesInCh - 1) {
-            setSelectValue(elements.selects['streamprotectedcase_c-ww2'], currentVIdx + 1);
+            setSelectValue(elements.selects.verse, currentVIdx + 1);
             pendingSeekOffset = { direction: 'forward', remainder: remainder };
             triggerVerseChange();
         } 
-        else if (currentChIdx < streambasesecured_ca6Data.length - 1) {
+        else if (currentChIdx < quranData.length - 1) {
             const nextChIdx = currentChIdx + 1;
-            setSelectValue(elements.selects['streamprotectedtrack_c-ee2'], nextChIdx);
+            setSelectValue(elements.selects.chapter, nextChIdx);
             populateVerseSelect(); 
-            setSelectValue(elements.selects['streamprotectedcase_c-ww2'], 0); 
+            setSelectValue(elements.selects.verse, 0); 
             pendingSeekOffset = { direction: 'forward', remainder: remainder };
             triggerVerseChange();
         }
         else {
-            console.log("End of media reached via seek");
+            console.log("End of Quran reached via seek");
         }
     }
 };
@@ -1605,10 +1567,16 @@ window.smartSeek = function(seconds) {
 function triggerVerseChange() {
     loadVerse(true); 
 }
+// --- SMART INTERACTION FEEDBACK LOGIC ---
 
 let lastKnownSrc = null;
 
+/**
+ * Triggers the visual "pop" for a specific action
+ * @param {string} type - 'play', 'pause', 'forward', 'backward'
+ */
 function showInteractionFeedback(type) {
+    // Optional: Only show if Cinema View is active
     if (!elements.views.cinema.classList.contains('active')) return;
 
     const iconId = `icon-${type}`;
@@ -1616,106 +1584,53 @@ function showInteractionFeedback(type) {
     
     if (icon) {
         icon.classList.remove('animate');
-        void icon.offsetWidth; 
+        void icon.offsetWidth; // Force Reflow to restart animation
         icon.classList.add('animate');
     }
 }
 
-if (elements.streambasesecured_ca6Audio) {
-    elements.streambasesecured_ca6Audio.addEventListener('play', () => {
-        const currentSrc = elements.streambasesecured_ca6Audio.src;
+// 1. SETUP AUDIO LISTENERS (The Robust Way)
+if (elements.quranAudio) {
+    
+    // PLAY EVENT: Fires when playback is requested (by user OR system)
+    elements.quranAudio.addEventListener('play', () => {
+        const currentSrc = elements.quranAudio.src;
+
+        // If the SRC is the same as before, it means we are RESUMING.
+        // This implies a User Action (Toggle).
         if (currentSrc === lastKnownSrc) {
             showInteractionFeedback('play');
         } 
+        
+        // If SRC is different, it's a System Action (New Verse).
+        // We do NOT show feedback, but we update the tracker.
         lastKnownSrc = currentSrc;
     });
 
-    elements.streambasesecured_ca6Audio.addEventListener('pause', () => {
-        if (!elements.streambasesecured_ca6Audio.ended && elements.streambasesecured_ca6Audio.readyState > 2) {
+    // PAUSE EVENT: Fires when playback stops
+    elements.quranAudio.addEventListener('pause', () => {
+        // We check !ended because we don't want a "Pause" icon when the verse simply finishes.
+        // We check readyState > 2 to ensure it's not just buffering/loading.
+        if (!elements.quranAudio.ended && elements.quranAudio.readyState > 2) {
              showInteractionFeedback('pause');
         }
     });
 }
 
-// --- FIXED KEYBOARD & TV REMOTE CONTROLS ---
+// 2. SETUP SEEK LISTENERS (Directional)
+// We still use keys for Seek because 'seeking' event doesn't tell us direction (Left/Right) easily.
 document.addEventListener('keydown', (e) => {
     if (document.activeElement.tagName === 'INPUT') return;
 
-    const isCinemaActive = elements.views.cinema && elements.views.cinema.classList.contains('active');
-    if (!isCinemaActive) return;
-
-    const audio = elements.streambasesecured_ca6Audio;
-    if (!audio) return;
-
-    // Handle Play/Pause (Spacebar or Enter/OK on TV)
-    if (e.key === ' ' || e.key === 'Enter') {
-        const isButtonFocused = document.activeElement.tagName === 'BUTTON' || document.activeElement.closest('._k');
-        
-        if (!isButtonFocused) {
-            e.preventDefault();
-            if (audio.paused) {
-                audio.play().catch(err => console.log('Play blocked', err));
-                showInteractionFeedback('play');
-            } else {
-                audio.pause();
-                showInteractionFeedback('pause');
-            }
-        }
+    if (e.key === 'ArrowRight') {
+        showInteractionFeedback('forward');
+        // smartSeek is already handled in your existing code
+    } 
+    else if (e.key === 'ArrowLeft') {
+        showInteractionFeedback('backward');
+        // smartSeek is already handled in your existing code
     }
-    // NOTE: Arrow keys are handled EXCLUSIVELY by nav_7c6b5axjs.js to prevent "crazy" behavior.
-    // MediaPlayPause keys are intentionally left out to let the TV/Browser natively toggle audio without double-firing.
+    // Note: We REMOVED the 'Space' handler here because the 
+    // audio 'play'/'pause' listeners above will handle it automatically 
+    // (and more accurately).
 });
-
-// --- FIXED MOBILE DOUBLE-TAP TO SEEK / PAUSE ---
-let tapCount = 0;
-let tapTimer = null;
-
-if (elements.views.cinema) {
-    elements.views.cinema.addEventListener('touchstart', (e) => {
-        // Ignore multi-touch (e.g., pinch to zoom)
-        if (e.touches.length > 1) return;
-        
-        // STRICT CHECK: Ignore taps on UI elements
-        if (e.target.closest('button') || e.target.closest('._k') || e.target.closest('nav')) {
-            return;
-        }
-
-        tapCount++;
-        
-        if (tapCount === 1) {
-            tapTimer = setTimeout(() => {
-                tapCount = 0; // Reset after 300ms if a second tap doesn't happen
-            }, 300);
-        } else if (tapCount === 2) {
-            clearTimeout(tapTimer);
-            tapCount = 0;
-            
-            if (e.cancelable) e.preventDefault(); // Stop screen zoom
-            
-            const touchX = e.touches[0].clientX;
-            const screenWidth = window.innerWidth;
-            const audio = elements.streambasesecured_ca6Audio;
-
-            if (touchX < screenWidth / 3) {
-                // Left 33%: Rewind
-                showInteractionFeedback('backward');
-                if (window.smartSeek) window.smartSeek(-10);
-            } else if (touchX > (screenWidth * 2) / 3) {
-                // Right 33%: Forward
-                showInteractionFeedback('forward');
-                if (window.smartSeek) window.smartSeek(10);
-            } else {
-                // Center 33%: Play/Pause
-                if (audio) {
-                    if (audio.paused) {
-                        audio.play().catch(err => console.log('Play blocked', err));
-                        showInteractionFeedback('play');
-                    } else {
-                        audio.pause();
-                        showInteractionFeedback('pause');
-                    }
-                }
-            }
-        }
-    }, { passive: false });
-}

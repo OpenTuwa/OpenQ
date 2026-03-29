@@ -14,7 +14,7 @@
     const DEVELOPER_MODE = 0; 
     // ==========================================
 
-    const STORAGE_KEY = 'streambasesecured_ca6_arabic_pref';
+    const STORAGE_KEY = 'quran_arabic_pref';
     const mainCssLinkElement = document.getElementById('_es');
 
     // --- LOGIC FOR BYPASS (MODE 0) ---
@@ -59,8 +59,8 @@
 
         /**
          * Shows modal and handles user's Arabic reading capability preference
-         * @param {number} chapterNumber - streamprotectedtrack_c-ee2 number to play
-         * @param {number} verseNumber - streamprotectedcase_c-ww2 number to start from
+         * @param {number} chapterNumber - Chapter number to play
+         * @param {number} verseNumber - Verse number to start from
          */
         window.launchPlayer = function(chapterNumber, verseNumber) {
             // Check storage again in case it changed
