@@ -1,0 +1,7 @@
+[build]
+command = "npm run build" # or whatever your build command is
+
+[functions]
+# This tells the bundler to stop looking for the source code of @cloudflare/ai
+# and assume it will be there at runtime.
+external_assets = ["@cloudflare/ai"]
