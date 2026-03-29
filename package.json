@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler pages dev _site",
     "deploy": "wrangler pages deploy _site --project-name=tuwa-player",
-    "obfuscate": "javascript-obfuscator ./_site --output ./_site --compact true --self-defending true --disable-console-output true --debug-protection true"
+    "obfuscate": "javascript-obfuscator ./_site --output ./_site --compact true --self-defending true --disable-console-output true --debug-protection true",
+    "build": "eleventy"
   },
   "dependencies": {
     "@cloudflare/ai": "^1.2.2",
@@ -16,7 +17,4 @@
     "javascript-obfuscator": "^4.0.0",
     "wrangler": "^3.0.0"
   }
-"scripts": {
-  "build": "eleventy"
-}
 }
