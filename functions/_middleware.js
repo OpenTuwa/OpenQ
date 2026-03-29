@@ -223,13 +223,6 @@ export async function onRequest(context) {
     return finalize(Response.redirect(new URL('/', request.url), 302));
   }
 
-  // Convenience: allow visitors to reach the article page using '/article'
-  // by serving the actual file. Some users try '/article' without the
-  // extension which would otherwise fall through to a 404.
-  if (lowerPath === '/article' || lowerPath === '/article/') {
-    return finalize(await env.ASSETS.fetch(new URL('/article.html', request.url)));
-  }
-
   // =========================================================================
   // 6. GUEST LOCKDOWN (Strict Allowlist)
   // =========================================================================
@@ -247,7 +240,6 @@ export async function onRequest(context) {
       '/favicon.ico',
       '/sw.js',
       '/i18n.js',
-      '/article.html',
       '/locales.js',
       '/assets/ui/err_9391za.html',
       '/assets/js/tuwa-hibernate.js',
@@ -263,7 +255,6 @@ export async function onRequest(context) {
       '/legal',       
       '/login-google',
       '/auth/',
-      '/api/article',
       '/api/config' // Allow config if needed for guest previews (optional)
     ];
 
