@@ -16,4 +16,7 @@
     "javascript-obfuscator": "^4.0.0",
     "wrangler": "^3.0.0"
   }
+"scripts": {
+  "build": "eleventy"
+}
 }

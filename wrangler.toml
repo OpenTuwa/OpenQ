@@ -1,5 +1,6 @@
 [build]
 command = "npm run build" # or whatever your build command is
+pages_build_output_dir = "_site"
 
 [functions]
 # This tells the bundler to stop looking for the source code of @cloudflare/ai
